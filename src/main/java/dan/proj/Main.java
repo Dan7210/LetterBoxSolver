@@ -1,3 +1,8 @@
+//Made by Daniel Marquez
+//Brute force solver for WSJ LetterBox game
+//Known issues: Dictionary isn't the same one WSJ uses, but generally works.
+//Final revision date: 1/24/2024
+
 package dan.proj;
 
 import java.io.BufferedReader;
@@ -5,17 +10,12 @@ import java.io.FileReader;
 import java.util.*;
 
 public class Main {
-    //Variables
-    private final static List<String> dictWords = new ArrayList<>(); //Dictionary
-    private final static Map<Character, Integer> charMap = new HashMap<>();
+    private final static List<String> dictWords = new ArrayList<>(); //Word Dictionary
+    private final static Map<Character, Integer> charMap = new HashMap<>(); //Map letters to sides
 
     private final static List<String> words = new ArrayList<>(); //Valid words
     private final static List<String> checkedWords = new ArrayList<>(); //Already-checked words
-    private final static List<String> newWords = new ArrayList<>(); //New Words found - Used to prevent concur. modification error
-
-    private final static List<List<String>> sentences = new ArrayList<>();
-    private final static List<List<String>> newSentences = new ArrayList<>();
-    private final static List<List<String>> foundSentences = new ArrayList<>();
+    private final static List<String> newWords = new ArrayList<>(); //New Words found per each iteration loop
 
     public static void main(String[] args) {
         System.out.println("Welcome to the WSJ LetterBox Solver.");
@@ -23,7 +23,9 @@ public class Main {
 
         //Load in Dictionary
         try {
-            String dictFilePath = "C:\\Users\\merky\\IdeaProjects\\LetterBoxSolver\\src\\main\\java\\dan\\proj\\dict.txt"; //Convert to local resource later
+            // Construct the file path for 'dict.txt' in the same directory
+            String dictFilePath = System.getProperty("user.dir") +  "\\res\\dict.txt";
+
             BufferedReader reader = new BufferedReader(new FileReader(dictFilePath));
             String line;
             while((line=reader.readLine()) != null) {
@@ -34,7 +36,7 @@ public class Main {
             System.exit(1);
         }
 
-        //Load in all four combinations.
+        //Load in all four letter "sides"
         for(int i=0;i<4;i++) {
             System.out.println("Enter 3-letters for side "+(i+1)+": ");
             String input = scanner.next();
@@ -62,9 +64,9 @@ public class Main {
             }
             if(newWords.isEmpty()) {
                 System.out.println(words.size() + " valid words were found for this setup.");
-                List<String> wordsToRemove = new ArrayList<String>();
+                List<String> wordsToRemove = new ArrayList<>();
                 for(String word:words) {
-                    if(!dictWords.contains(word) || word.length() < 5 || uniqueLetterCounter(word) < 3) {
+                    if(!dictWords.contains(word) || word.length() < 3 || uniqueLetterCounter(word) < 3) {
                         wordsToRemove.add(word);
                     }
                 }
@@ -79,7 +81,70 @@ public class Main {
             newWords.clear();
         }
 
-        //Find most letter-diverse word to start with
+        //Make sentence starting with the first word and then expand on it until valid.
+        List<String> sentence = new ArrayList<>();
+        sentence.add(findBestWord()); //Find most letter-diverse word to start with
+        while(uniqueLetterCounter(sentence)<12) {
+            boolean wordFound = false;
+            for(String word:words) {
+                //If the sentence does not already contain a word and the start/end letters match
+                if(!sentence.contains(word) && word.charAt(0)==sentence.get(sentence.size()-1).charAt(sentence.get(sentence.size()-1).length()-1)) {
+                    List<String> tempSentence = new ArrayList<>(sentence); //Copy elements without memory reference
+                    tempSentence.add(word);
+                    if(uniqueLetterCounter(tempSentence) > uniqueLetterCounter(sentence)) {
+                        sentence.clear();
+                        sentence.addAll(tempSentence);
+                        wordFound = true;
+                    }
+                }
+            }
+            //If no valid word can be found
+            if(!wordFound) {
+                //If the sentence is not at its root word, remove the last word and try again.
+                if(sentence.size() > 1) {
+                    String lastWord = sentence.get(sentence.size()-1);
+                    System.out.println("Removing word: " + lastWord);
+                    words.remove(lastWord);
+                    sentence.remove(lastWord);
+                }
+                //Exit if no valid combinations are found.
+                else if(words.isEmpty()) {
+                    System.out.println("No valid solution found.");
+                    System.exit(1);
+                }
+                //Restart if no valid combination is found.
+                else {
+
+                    System.out.println("Changing first word.");
+                    words.remove(sentence.get(0));
+                    sentence.clear();
+                    sentence.add(findBestWord());
+                }
+            }
+        }
+
+        //Print out the solution
+        System.out.print("\nThe best sentence to win the game is: ");
+        for(String word:sentence) {
+            System.out.print(word + " ");
+        }
+        System.out.println(".");
+    }
+
+    //Searches for valid words, letters must not be from the same side (charMap)
+    private static void bruteSearch(String word) {
+        for(Character letter:charMap.keySet()) {
+            if(!Objects.equals(charMap.get(letter), charMap.get(word.charAt(word.length() - 1)))) {
+                String newWord = word+letter;
+                if(checkStartsWith(word)) {
+                    newWords.add(newWord);
+                }
+            }
+        }
+    }
+
+    //Just finds the word out of the given list that has the most unique letters.
+    private static String findBestWord() {
         int bestSize = -1;
         String bestWord = "";
         for (String word : words) {
@@ -88,87 +153,10 @@ public class Main {
                 bestWord = word;
             }
         }
-        //Make first sentence with best word
-        List<String> newSentence = new ArrayList<>();
-        newSentence.add(bestWord);
-        sentences.add(newSentence);
-        newSentences.add(newSentence);
-
-        boolean run = true;
-        //Find all valid sentences
-
-
-
-        while(run) {
-            //Make all possible sentences
-            for(List<String> sentence:newSentences) {
-                System.out.println(sentence.size());
-                makeVerbose(sentence);
-            }
-            newSentences.clear();
-            newSentences.addAll(foundSentences);
-            sentences.addAll(foundSentences);
-            foundSentences.clear();
-            //Terminate if sentences are done generating
-            for(List<String> sentence:newSentences) {
-                if (newSentences.isEmpty() || uniqueLetterCounter(sentence)==12) {
-                    System.out.println(sentences.size() + " valid sentences were found using generated words.");
-                    run = false;
-                    break;
-                }
-            }
-        }
-
-        //Find and print best sentence
-        List<String> bestSentence = null;
-        int bestLength = 999;
-        for(List<String> sentence:sentences) {
-            if(uniqueLetterCounter(sentence)==12 && letterCounter(sentence)<bestLength) {
-                bestSentence = sentence;
-                bestLength = letterCounter(sentence);
-            }
-        }
-        if(bestSentence == null) {
-            System.out.println("The game is unwinnable. RIP.");
-            System.exit(1);
-        }
-        System.out.print("\nThe best sentence to win the game is: ");
-        for(String word:bestSentence) {
-            System.out.print(word + " ");
-        }
-        System.out.println(".");
+        return bestWord;
     }
 
-    private static void makeVerbose(List<String> sentence) {
-        for(String word:words) {
-            //If sentence does not already contain this word and the sentence ends with the same letter the word starts with
-            if(!sentence.contains(word) && word.charAt(0)==sentence.get(sentence.size()-1).charAt(sentence.get(sentence.size()-1).length()-1)) {
-                List<String> newSentence = sentence;
-                newSentence.add(word);
-                foundSentences.add(newSentence);
-            }
-        }
-    }
-
-    private static void bruteSearch(String word) {
-        for(Character letter:charMap.keySet()) {
-            if(charMap.get(letter) != charMap.get(word.charAt(word.length()-1))) {
-                String newWord = word+letter;
-                if(checkStartsWIth(word)) {
-                    newWords.add(newWord);
-                }
-            }
-        }
-    }
-
-    private static int letterCounter(List<String> sentence) {
-        int length = 0;
-        for(String word:sentence) {
-            length += word.length();
-        }
-        return length;
-    }
-
+    //Counts the amount of unique letters in a sentence
     private static int uniqueLetterCounter(List<String> sentence) {
         List<Character> uniqueLetters = new ArrayList<>();
         for(String word:sentence) {
@@ -182,6 +170,7 @@ public class Main {
         return uniqueLetters.size();
     }
 
+    //Counts the amount of unique letters in a word
     private static int uniqueLetterCounter(String word) {
         List<Character> uniqueLetters = new ArrayList<>();
         for (int i = 0; i < word.length(); i++) {
@@ -193,7 +182,8 @@ public class Main {
         return uniqueLetters.size();
     }
 
-    private static boolean checkStartsWIth(String word) {
+    //Checks if a dictionary word starts with the given word.
+    private static boolean checkStartsWith(String word) {
         for(String dWord:dictWords) {
             if(dWord.startsWith(word)) {
                 return true;
